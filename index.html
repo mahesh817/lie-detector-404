@@ -1,0 +1,2016 @@
+<!DOCTYPE html>
+<!--
+  LIE DETECTOR 404
+  ------------------------------------------------------------
+  A fictional, humorous lie-detection simulator.
+  Experimental frontend project: plain HTML, CSS and JavaScript.
+  No frameworks, no build step, no network requests, no tracking.
+
+  IMPORTANT: This app cannot detect real lies. The score is made
+  up by a few silly text rules plus seeded pseudo-randomness.
+  It is entertainment only.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="A fictional, humorous lie-detection simulator. Entertainment only. Built with plain HTML, CSS and JavaScript.">
+  <title>LIE DETECTOR 404 // Fictional Truth Scanner</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230a0c0b'/%3E%3Cpath d='M3 17h7l3-9 5 16 3-7h8' fill='none' stroke='%2339e58c' stroke-width='2'/%3E%3C/svg%3E">
+
+  <style>
+    /* =========================================================
+       1. DESIGN TOKENS
+       ========================================================= */
+    :root {
+      --bg: #0a0c0b;
+      --panel: #101412;
+      --panel-raised: #151a17;
+      --line: #222d27;
+      --line-strong: #2f3d35;
+
+      --text: #d3e6da;
+      --text-dim: #8aa093;
+      --text-faint: #70867a;
+
+      --green: #39e58c;
+      --green-dim: #1d7a4b;
+      --red: #ff4f5e;
+      --red-dim: #7d2832;
+      --amber: #d8b14a;
+
+      --tone: var(--green); /* changed per result: good / mid / bad */
+
+      --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Cascadia Mono",
+                   Menlo, Consolas, "Liberation Mono", "DejaVu Sans Mono", monospace;
+      --radius: 4px;
+    }
+
+    /* =========================================================
+       2. BASE / RESET
+       ========================================================= */
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html {
+      color-scheme: dark;
+      -webkit-text-size-adjust: 100%;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 15px;
+      line-height: 1.55;
+    }
+
+    /* Makes the HTML "hidden" attribute always win over display rules */
+    [hidden] { display: none !important; }
+
+    ::selection { background: var(--green); color: #04130b; }
+
+    /* Very subtle CRT scanlines over the whole page (static, no animation) */
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 50;
+      background: repeating-linear-gradient(
+        to bottom,
+        rgba(255, 255, 255, 0.025) 0,
+        rgba(255, 255, 255, 0.025) 1px,
+        transparent 1px,
+        transparent 3px
+      );
+    }
+
+    dl, dd, ul, ol, p, h1, h2, h3 { margin: 0; }
+    ul, ol { padding: 0; }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .skip-link {
+      position: absolute;
+      left: 8px;
+      top: -56px;
+      z-index: 100;
+      padding: 8px 12px;
+      background: var(--green);
+      color: #04130b;
+      font-weight: 700;
+      text-decoration: none;
+    }
+    .skip-link:focus { top: 8px; }
+
+    /* =========================================================
+       3. PAGE LAYOUT
+       ========================================================= */
+    .app {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 24px 16px 32px;
+    }
+
+    .topbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .title {
+      font-size: clamp(1.6rem, 1rem + 3.4vw, 2.7rem);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      line-height: 1.1;
+    }
+
+    .title-404 {
+      color: var(--red);
+      text-shadow: 0 0 10px rgba(255, 79, 94, 0.4);
+      animation: flicker 7s infinite;
+    }
+
+    .tagline {
+      margin-top: 8px;
+      color: var(--text-dim);
+      font-size: 14px;
+    }
+    .tagline::before { content: "> "; color: var(--green); }
+
+    .status-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 20px;
+      list-style: none;
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      color: var(--text-dim);
+    }
+    .status-row li { display: flex; align-items: center; }
+    .status-num { margin-left: 6px; color: var(--green); font-variant-numeric: tabular-nums; }
+
+    .dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      margin-right: 7px;
+      border-radius: 50%;
+      background: var(--text-faint);
+    }
+    .dot.on-green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .dot.pulse { animation: pulse 1s ease-in-out infinite; }
+
+    .notice {
+      margin: 16px 0;
+      padding: 10px 14px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--red);
+      color: var(--text-dim);
+      font-size: 13px;
+    }
+    .notice strong { color: var(--red); letter-spacing: 0.08em; }
+
+    .dashboard {
+      display: grid;
+      gap: 16px;
+      align-items: start;
+      grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+      grid-template-rows: auto 1fr;
+      grid-template-areas:
+        "input result"
+        "history result";
+    }
+    .area-input   { grid-area: input; }
+    .area-result  { grid-area: result; }
+    .area-history { grid-area: history; }
+
+    /* =========================================================
+       4. PANELS
+       ========================================================= */
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 44px;
+      padding: 8px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .panel-title {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+    .panel-title .idx { color: var(--green); }
+
+    .panel-tag {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      color: var(--text-faint);
+      text-transform: uppercase;
+    }
+
+    .panel-body { padding: 16px; }
+
+    /* =========================================================
+       5. INPUT PANEL
+       ========================================================= */
+    .prompt-line {
+      margin-bottom: 12px;
+      font-size: 13px;
+      color: var(--green);
+    }
+
+    .cursor {
+      display: inline-block;
+      width: 0.6em;
+      height: 1em;
+      margin-left: 4px;
+      vertical-align: -2px;
+      background: var(--green);
+      animation: blink 1s steps(1) infinite;
+    }
+
+    .field-label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+
+    textarea {
+      display: block;
+      width: 100%;
+      min-height: 160px;
+      resize: vertical;
+      padding: 12px 14px;
+      background: #080a09;
+      color: var(--green);
+      caret-color: var(--green);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      font: inherit;
+      font-size: 16px; /* 16px stops iOS from zooming on focus */
+      line-height: 1.5;
+    }
+    textarea::placeholder { color: var(--text-faint); }
+    textarea:focus-visible {
+      outline: 2px solid var(--green);
+      outline-offset: 2px;
+      border-color: var(--green);
+    }
+    textarea[readonly] { opacity: 0.7; }
+    textarea[aria-invalid="true"] { border-color: var(--red); }
+
+    .field-meta {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 6px 12px;
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+    #charCount.limit { color: var(--red); }
+
+    kbd {
+      padding: 0 5px;
+      border: 1px solid var(--line-strong);
+      border-radius: 3px;
+      background: var(--panel-raised);
+      color: var(--text);
+      font: inherit;
+      font-size: 11px;
+    }
+
+    .error {
+      margin-top: 12px;
+      padding: 8px 12px;
+      border: 1px solid var(--red-dim);
+      background: rgba(255, 79, 94, 0.08);
+      color: #ff9aa3;
+      font-size: 13px;
+    }
+
+    /* =========================================================
+       6. BUTTONS
+       ========================================================= */
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .btn {
+      flex: 1 1 0;
+      min-height: 44px;
+      padding: 10px 14px;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      background: var(--panel-raised);
+      color: var(--text);
+      font: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background-color 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
+    }
+    .btn:hover:not(:disabled) { border-color: var(--green); color: var(--green); }
+    .btn:active:not(:disabled) { transform: translateY(1px); }
+    .btn:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .btn-primary {
+      flex: 1 1 100%;
+      background: var(--green);
+      border-color: var(--green);
+      color: #04130b;
+      font-size: 14px;
+    }
+    .btn-primary:hover:not(:disabled) { background: #62f0a8; border-color: #62f0a8; color: #04130b; }
+
+    .btn-danger:hover:not(:disabled) { border-color: var(--red); color: var(--red); }
+
+    .btn-small {
+      flex: 0 0 auto;
+      min-height: 30px;
+      padding: 4px 10px;
+      font-size: 11px;
+    }
+
+    /* =========================================================
+       7. RESULT PANEL: telemetry + scanner
+       ========================================================= */
+    .telemetry {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1px;
+      background: var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+    .tele-cell { padding: 10px 12px; background: var(--panel); }
+    .tele-label {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+    .tele-value {
+      font-size: 17px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: var(--text);
+    }
+
+    .scanner {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .scanner-view { padding: 16px; }
+
+    /* The animated scanning line */
+    .sweep {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      transform: translateY(-100%);
+      animation: sweep 5s linear infinite;
+      opacity: 0.5;
+    }
+    .sweep::before {
+      content: "";
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      height: 44px;
+      background: linear-gradient(to top, rgba(57, 229, 140, 0.1), transparent);
+    }
+    .sweep::after {
+      content: "";
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      height: 2px;
+      background: var(--green);
+      box-shadow: 0 0 12px var(--green);
+    }
+    .scanner[data-state="busy"] .sweep { animation-duration: 1.3s; opacity: 1; }
+    .scanner[data-state="result"] .sweep { opacity: 0.2; }
+
+    /* Idle view */
+    .idle-view {
+      min-height: 380px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      text-align: center;
+    }
+    .wave { width: min(300px, 80%); height: 40px; }
+    .wave polyline { fill: none; stroke: var(--green-dim); stroke-width: 2; }
+    .idle-title { font-size: 14px; letter-spacing: 0.18em; color: var(--text-dim); }
+    .idle-sub { max-width: 34ch; font-size: 13px; color: var(--text-faint); }
+
+    /* Busy view */
+    .busy-view { min-height: 380px; }
+    .busy-title { font-size: 13px; letter-spacing: 0.14em; color: var(--green); }
+    .progress {
+      height: 6px;
+      margin: 14px 0;
+      overflow: hidden;
+      border-radius: 3px;
+      background: var(--line);
+    }
+    .progress-bar {
+      width: 0;
+      height: 100%;
+      background: var(--green);
+      box-shadow: 0 0 8px rgba(57, 229, 140, 0.5);
+      transition: width 0.3s ease-out;
+    }
+    .scan-log { list-style: none; font-size: 13px; color: var(--text-dim); }
+    .scan-log li {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 3px 0;
+      animation: log-in 0.25s ease-out;
+    }
+    .scan-log .ok { color: var(--green); font-weight: 700; }
+
+    /* Result view */
+    .result-view[data-tone="good"] { --tone: var(--green); }
+    .result-view[data-tone="mid"]  { --tone: var(--amber); }
+    .result-view[data-tone="bad"]  { --tone: var(--red); }
+    .result-view.enter { animation: result-in 0.35s ease-out; }
+
+    .result-top {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .gauge { position: relative; flex: 0 0 auto; width: 150px; height: 150px; }
+    .gauge svg { display: block; width: 100%; height: 100%; }
+    .gauge-track { fill: none; stroke: var(--line); stroke-width: 8; }
+    .gauge-value {
+      fill: none;
+      stroke: var(--tone);
+      stroke-width: 8;
+      stroke-dasharray: 326.73;
+      stroke-dashoffset: 326.73;
+      transition: stroke-dashoffset 0.9s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    .gauge-label {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .gauge-label strong {
+      font-size: 2.1rem;
+      line-height: 1;
+      color: var(--tone);
+      text-shadow: 0 0 10px color-mix(in srgb, var(--tone) 35%, transparent);
+      font-variant-numeric: tabular-nums;
+    }
+    .gauge-label span {
+      margin-top: 6px;
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      color: var(--text-dim);
+    }
+
+    .verdict-block { flex: 1 1 220px; min-width: 0; }
+    .eyebrow {
+      margin-bottom: 4px;
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+    .verdict-title {
+      font-size: clamp(1.15rem, 0.9rem + 1.6vw, 1.7rem);
+      line-height: 1.2;
+      letter-spacing: 0.04em;
+      color: var(--tone);
+      overflow-wrap: anywhere;
+    }
+    .verdict-line { margin-top: 8px; }
+
+    /* Suspicion meter */
+    .meter { margin-top: 20px; }
+    .meter[data-level="low"]  { --meter: var(--green); }
+    .meter[data-level="mid"]  { --meter: var(--amber); }
+    .meter[data-level="high"] { --meter: var(--red); }
+    .meter-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 6px;
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+    .meter-head strong { color: var(--meter, var(--text)); font-variant-numeric: tabular-nums; }
+    .segments {
+      display: grid;
+      grid-template-columns: repeat(20, minmax(0, 1fr));
+      gap: 3px;
+      height: 16px;
+    }
+    .segment {
+      border-radius: 1px;
+      background: var(--line);
+      transition: background-color 0.2s ease;
+      transition-delay: calc(var(--i, 0) * 25ms);
+    }
+    .segment.on { background: var(--meter, var(--green)); }
+
+    /* Notes + breakdown blocks */
+    .block {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px dashed var(--line-strong);
+    }
+    .block-title {
+      margin-bottom: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+
+    .signal-list { list-style: none; font-size: 13px; }
+    .signal-list li {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 5px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .sig-label { min-width: 0; overflow-wrap: anywhere; color: var(--text-dim); }
+    .sig-value { flex: 0 0 auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .sig-pos .sig-value { color: var(--green); }
+    .sig-neg .sig-value { color: var(--red); }
+    .sig-neu .sig-value { color: var(--text-dim); }
+    .signal-list .sig-total { border-bottom: 0; padding-top: 10px; }
+    .sig-total .sig-label { color: var(--text); font-weight: 700; }
+    .sig-total .sig-value { color: var(--tone); }
+
+    .subject-echo {
+      margin-top: 16px;
+      font-size: 12px;
+      color: var(--text-faint);
+      overflow-wrap: anywhere;
+    }
+    .fine-print {
+      margin-top: 10px;
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      color: var(--text-dim);
+    }
+
+    /* =========================================================
+       8. HISTORY PANEL
+       ========================================================= */
+    .history-list { display: grid; gap: 6px; list-style: none; }
+    .history-empty { font-size: 13px; color: var(--text-dim); }
+    .history-note { margin-top: 12px; font-size: 11px; color: var(--text-faint); }
+
+    .history-item {
+      display: grid;
+      grid-template-columns: 52px minmax(0, 1fr);
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel-raised);
+      color: var(--text);
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .history-item:hover { border-color: var(--green); }
+    .history-item:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+
+    .hist-score {
+      padding: 6px 0;
+      border: 1px solid currentColor;
+      border-radius: 3px;
+      font-size: 14px;
+      font-weight: 700;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+    .hist-good { color: var(--green); }
+    .hist-mid  { color: var(--amber); }
+    .hist-bad  { color: var(--red); }
+
+    .hist-text,
+    .hist-meta {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .hist-text { font-size: 13px; }
+    .hist-meta { font-size: 11px; letter-spacing: 0.06em; color: var(--text-dim); }
+
+    /* =========================================================
+       9. FOOTER
+       ========================================================= */
+    .footer {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 6px 24px;
+      margin-top: 28px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    /* =========================================================
+       10. KEYFRAMES
+       ========================================================= */
+    @keyframes blink   { 50% { opacity: 0; } }
+    @keyframes pulse   { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+    @keyframes flicker {
+      0%, 91%, 100% { opacity: 1; }
+      92% { opacity: 0.45; }
+      94% { opacity: 1; }
+      96% { opacity: 0.6; }
+      97% { opacity: 1; }
+    }
+    @keyframes sweep   { from { transform: translateY(-100%); } to { transform: translateY(100%); } }
+    @keyframes log-in  { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
+    @keyframes result-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+    /* =========================================================
+       11. RESPONSIVE
+       ========================================================= */
+    @media (max-width: 860px) {
+      .dashboard {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto;
+        grid-template-areas:
+          "input"
+          "result"
+          "history";
+      }
+    }
+
+    @media (max-width: 520px) {
+      body { font-size: 14px; }
+      .app { padding: 16px 12px 24px; }
+      .telemetry { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .gauge { width: 130px; height: 130px; }
+      .idle-view, .busy-view { min-height: 320px; }
+    }
+
+    /* =========================================================
+       12. REDUCED MOTION
+       ========================================================= */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+        scroll-behavior: auto !important;
+      }
+      .sweep { display: none; }
+    }
+  </style>
+</head>
+
+<body>
+  <a class="skip-link" href="#statement">Skip to statement input</a>
+
+  <div class="app">
+
+    <!-- ===================== HEADER ===================== -->
+    <header class="topbar">
+      <div class="brand">
+        <h1 class="title">LIE DETECTOR <span class="title-404">404</span></h1>
+        <p class="tagline">A fictional truth-scanning terminal for statements of questionable character.</p>
+      </div>
+      <ul class="status-row" aria-label="System status">
+        <li><span class="dot on-green" aria-hidden="true"></span>CORE ONLINE</li>
+        <li><span class="dot" id="sensorDot" aria-hidden="true"></span><span id="sensorStatus">SENSORS IDLE</span></li>
+        <li>SCANS<span class="status-num" id="scanCount">000</span></li>
+      </ul>
+    </header>
+
+    <p class="notice" role="note">
+      <strong>ENTERTAINMENT ONLY.</strong>
+      This is a joke. It cannot detect real lies and cannot tell whether a real person is honest.
+      The score is fictional, produced by a few silly text rules and a pinch of seeded randomness.
+    </p>
+
+    <noscript>
+      <p class="notice"><strong>JAVASCRIPT REQUIRED.</strong> The scanner needs JavaScript to run.</p>
+    </noscript>
+
+    <main class="dashboard">
+
+      <!-- ===================== 01 INPUT ===================== -->
+      <section class="panel area-input" aria-labelledby="input-title">
+        <div class="panel-head">
+          <h2 class="panel-title" id="input-title"><span class="idx">01</span> // Subject statement</h2>
+          <span class="panel-tag">Input</span>
+        </div>
+        <div class="panel-body">
+          <p class="prompt-line" aria-hidden="true">&gt; awaiting statement<span class="cursor"></span></p>
+
+          <label class="field-label" for="statement">Type something you want scanned</label>
+          <textarea
+            id="statement"
+            name="statement"
+            rows="6"
+            maxlength="280"
+            spellcheck="false"
+            autocomplete="off"
+            aria-describedby="charCount errorMsg"
+            placeholder="Example: I was NOT late. There was traffic. Honestly."></textarea>
+
+          <div class="field-meta">
+            <span id="charCount">0 / 280</span>
+            <span class="hint"><kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>Enter</kbd> to analyze</span>
+          </div>
+
+          <p class="error" id="errorMsg" role="alert" hidden></p>
+
+          <div class="btn-row">
+            <button type="button" class="btn btn-primary" id="analyzeBtn">Analyze</button>
+            <button type="button" class="btn" id="randomBtn">Random statement</button>
+            <button type="button" class="btn btn-danger" id="clearBtn" title="Clears the input and results (history stays)">Clear</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== 02 OUTPUT ===================== -->
+      <section class="panel area-result" aria-labelledby="result-title">
+        <div class="panel-head">
+          <h2 class="panel-title" id="result-title"><span class="idx">02</span> // Analysis output</h2>
+          <span class="panel-tag">Simulated readings</span>
+        </div>
+
+        <dl class="telemetry" aria-label="Simulated sensor readings">
+          <div class="tele-cell"><dt class="tele-label">Pulse</dt><dd class="tele-value" id="telePulse">--</dd></div>
+          <div class="tele-cell"><dt class="tele-label">Sweat</dt><dd class="tele-value" id="teleSweat">--</dd></div>
+          <div class="tele-cell"><dt class="tele-label">Eyebrow</dt><dd class="tele-value" id="teleBrow">--</dd></div>
+          <div class="tele-cell"><dt class="tele-label">Nerve</dt><dd class="tele-value" id="teleNerve">--</dd></div>
+        </dl>
+
+        <div class="scanner" id="scanner" data-state="idle" aria-busy="false">
+
+          <!-- Idle -->
+          <div class="scanner-view idle-view" id="idleView">
+            <svg class="wave" viewBox="0 0 300 40" aria-hidden="true" focusable="false">
+              <polyline points="0,20 100,20 108,20 116,6 124,34 132,20 300,20"></polyline>
+            </svg>
+            <p class="idle-title">NO SUBJECT LOADED</p>
+            <p class="idle-sub">Enter a statement, then press ANALYZE. Or try RANDOM STATEMENT to watch the machine work.</p>
+          </div>
+
+          <!-- Scanning -->
+          <div class="scanner-view busy-view" id="busyView" hidden>
+            <p class="busy-title">SCANNING SUBJECT STATEMENT<span class="cursor" aria-hidden="true"></span></p>
+            <div class="progress" id="progress" role="progressbar" aria-label="Scan progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <div class="progress-bar" id="progressBar"></div>
+            </div>
+            <ul class="scan-log" id="scanLog"></ul>
+          </div>
+
+          <!-- Result -->
+          <div class="scanner-view result-view" id="resultView" data-tone="mid" hidden>
+            <div class="result-top">
+              <div class="gauge">
+                <svg viewBox="0 0 120 120" aria-hidden="true" focusable="false">
+                  <circle class="gauge-track" cx="60" cy="60" r="52"></circle>
+                  <circle class="gauge-value" id="gaugeValue" cx="60" cy="60" r="52" transform="rotate(-90 60 60)"></circle>
+                </svg>
+                <div class="gauge-label">
+                  <strong id="scoreValue">--</strong>
+                  <span>TRUTH PROB.</span>
+                </div>
+              </div>
+              <div class="verdict-block">
+                <p class="eyebrow">Verdict</p>
+                <h3 class="verdict-title" id="verdictTitle">--</h3>
+                <p class="verdict-line" id="verdictLine"></p>
+              </div>
+            </div>
+
+            <div class="meter" id="suspicionMeter" data-level="mid">
+              <div class="meter-head">
+                <span>Suspicion index</span>
+                <strong id="suspicionValue">--</strong>
+              </div>
+              <div class="segments" id="segments" role="img" aria-label="Suspicion index"></div>
+            </div>
+
+            <div class="block">
+              <h3 class="block-title">Lab notes</h3>
+              <p class="explanation" id="explanation"></p>
+            </div>
+
+            <div class="block">
+              <h3 class="block-title">Score breakdown (how the sausage was made)</h3>
+              <ul class="signal-list" id="signalList"></ul>
+            </div>
+
+            <p class="subject-echo" id="subjectEcho"></p>
+            <p class="fine-print">FICTIONAL ENTERTAINMENT SCORE. NOT A REAL LIE DETECTOR. DO NOT USE ON REAL PEOPLE OR REAL DECISIONS.</p>
+          </div>
+
+          <div class="sweep" aria-hidden="true"></div>
+        </div>
+      </section>
+
+      <!-- ===================== 03 HISTORY ===================== -->
+      <section class="panel area-history" aria-labelledby="history-title">
+        <div class="panel-head">
+          <h2 class="panel-title" id="history-title"><span class="idx">03</span> // Recent analyses</h2>
+          <button type="button" class="btn btn-small btn-danger" id="purgeBtn" disabled>Purge</button>
+        </div>
+        <div class="panel-body">
+          <ol class="history-list" id="historyList"></ol>
+          <p class="history-note">Last 5 scans. Click an entry to load it back into the input. History lives in memory only and vanishes on refresh.</p>
+        </div>
+      </section>
+
+    </main>
+
+    <footer class="footer">
+      <p>LIE DETECTOR 404 // an experimental frontend project. Plain HTML, CSS and JavaScript.</p>
+      <p>Runs offline. No tracking. No real lie detection.</p>
+    </footer>
+  </div>
+
+  <!-- Screen reader announcements (visually hidden) -->
+  <p class="sr-only" id="liveStatus" role="status" aria-live="polite"></p>
+
+  <script>
+    (function () {
+      "use strict";
+
+      /* ============================================================
+         1. CONFIGURATION
+         ============================================================ */
+      const MAX_LENGTH = 280;
+      const MIN_LENGTH = 3;
+      const MAX_HISTORY = 5;
+      const BASELINE_SCORE = 58;
+      const SEGMENT_COUNT = 20;
+      const GAUGE_CIRCUMFERENCE = 2 * Math.PI * 52;
+
+      /* ============================================================
+         2. CONTENT: word lists, verdicts and text templates
+         ============================================================ */
+
+      // Word lists used by the (silly) heuristics
+      const ABSOLUTE_TERMS = [
+        "always", "never", "everyone", "everybody", "nobody", "nothing", "everything",
+        "totally", "completely", "absolutely", "literally", "entirely", "definitely",
+        "100%", "100 percent"
+      ];
+      const OATH_TERMS = [
+        "honestly", "to be honest", "trust me", "i swear", "i promise", "believe me",
+        "cross my heart", "no offense", "i would never lie", "i am not lying",
+        "i'm not lying", "i am telling the truth", "i'm telling the truth", "on my life"
+      ];
+      const HEDGE_TERMS = [
+        "maybe", "i think", "probably", "kind of", "sort of", "i guess", "might",
+        "perhaps", "not sure", "i believe", "i suppose", "possibly", "apparently"
+      ];
+      const EXCUSE_TERMS = [
+        "traffic", "battery died", "phone died", "wifi", "wi-fi", "alarm", "dog ate",
+        "didn't get the message", "did not get the message", "power outage",
+        "internet was down", "emergency", "was sick", "stuck in", "my cousin", "lost my"
+      ];
+      const EXTRAORDINARY_TERMS = [
+        "billionaire", "millionaire", "alien", "aliens", "ufo", "celebrity", "famous",
+        "president", "won the lottery", "time traveler", "time traveller", "time travel",
+        "ghost", "dragon", "dinosaur", "superpower", "i invented", "world record",
+        "secret agent", "astronaut", "nasa"
+      ];
+      const MUNDANE_TERMS = [
+        "breakfast", "lunch", "dinner", "tea", "coffee", "bus", "train", "laundry",
+        "groceries", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday",
+        "sunday", "weekend", "yesterday", "today", "this morning", "tonight", "water",
+        "sky", "grass", "walked", "slept", "cooked", "cat", "plants"
+      ];
+      const CONFESSION_TERMS = [
+        "i forgot", "i was late", "my fault", "i messed up", "i made a mistake",
+        "i don't know", "i'm sorry", "i am sorry", "it was me", "i did it"
+      ];
+      const PARADOX_PHRASES = [
+        "this statement is false", "this sentence is false", "this statement is a lie",
+        "i am lying right now", "i'm lying right now", "i am lying to you", "i'm lying to you",
+        "i always lie", "everything i say is a lie", "i never tell the truth"
+      ];
+
+      // 12 score-based verdicts (checked from lowest to highest "max")
+      const VERDICTS = [
+        { max: 8,  title: "PANTS ON FIRE",             line: "Smoke detected near the keyboard. Please evacuate the statement." },
+        { max: 17, title: "CRITICAL FIBBING DETECTED", line: "Seven alarms went off. Two of them were not even installed." },
+        { max: 26, title: "HIGHLY SUSPICIOUS",         line: "The needle swung hard to the right and refused to come back." },
+        { max: 35, title: "STORY HAS HOLES",           line: "Structurally speaking, this claim is mostly doorways." },
+        { max: 44, title: "LEANING SKETCHY",           line: "Not a disaster, not a triumph. A raised eyebrow in sentence form." },
+        { max: 54, title: "INCONCLUSIVE AND TWITCHY",  line: "The scanner is split down the middle and slightly offended." },
+        { max: 63, title: "MOSTLY BELIEVABLE",         line: "It holds together, like a sandwich made by someone who cares." },
+        { max: 72, title: "PROBABLY FINE",             line: "No sirens. A mild hum of approval from the cooling fan." },
+        { max: 81, title: "CREDIBLE VIBES",            line: "The scanner nodded once and returned to its screensaver." },
+        { max: 89, title: "SUSPICIOUSLY HONEST",       line: "Almost too clean. The detector respects it and stays alert." },
+        { max: 95, title: "VERIFIED-ISH",              line: "Stamped, filed, and only slightly laminated." },
+        { max: 99, title: "TRUTH OVERFLOW",            line: "Reading exceeds safe sincerity levels. Please hydrate." }
+      ];
+
+      // Special verdict for self-referential statements
+      const PARADOX_VERDICT = {
+        title: "ERROR 404: LOGIC NOT FOUND",
+        line: "The statement contradicts itself. The scanner is now politely crashing."
+      };
+
+      // Explanation building blocks, chosen by tone
+      const INTROS = {
+        bad: [
+          "The scanner flinched before the sentence even ended.",
+          "Multiple sensors lit up at the same time, which is never a great sign.",
+          "Analysis complete, and the cooling fan sounds worried."
+        ],
+        mid: [
+          "The scanner could not settle on a side, so it took notes.",
+          "Mixed signals everywhere, like a weather forecast written by committee.",
+          "The needle wandered around for a while before settling down."
+        ],
+        good: [
+          "The scanner relaxed almost immediately.",
+          "Not much drama here, which the scanner finds refreshing.",
+          "Readings stayed calm and the cooling fan barely noticed."
+        ]
+      };
+
+      const OUTROS = {
+        bad: [
+          "Recommendation: add details, remove drama, try again.",
+          "Filing this under creative writing.",
+          "A fresh statement may restore the scanner's faith."
+        ],
+        mid: [
+          "Try rewording it and see which way the needle falls.",
+          "More concrete detail would help the scanner pick a side.",
+          "Verdict pending further vibes."
+        ],
+        good: [
+          "Proceed with cautious optimism.",
+          "The scanner approves, in a quiet and non-binding way.",
+          "Stamp applied. Not legally binding, obviously."
+        ]
+      };
+
+      const QUIET_NOTES = [
+        "No strong signals found, so the detector shrugged and consulted its dice.",
+        "Nothing dramatic in the wording. The scanner mostly guessed, confidently.",
+        "The text was too plain to trigger any rules, so luck did most of the work."
+      ];
+
+      const PARADOX_NOTES = [
+        "That statement is arguing with itself. The scanner declined to pick a winner and filed a complaint with the Department of Logic.",
+        "A sentence that proves itself wrong cannot be scored. The detector forced a coin flip and went to lie down.",
+        "Self-reference detected. The scanner looped three times, then opted for a polite crash."
+      ];
+
+      // Note templates per signal. {terms}, {count} are filled in by code.
+      const NOTES = {
+        absolutes: [
+          "Absolute language ({terms}) detected. Real life is rarely that tidy.",
+          "{terms} is a lot of certainty for one sentence. The needle noticed.",
+          "Total-commitment words ({terms}) raised the eyebrow sensor by several millimeters."
+        ],
+        oaths: [
+          "Sincerity theater ({terms}). Truthful sentences rarely need a notary.",
+          "{terms} is the verbal equivalent of crossing your fingers behind your back.",
+          "The statement vouched for itself with {terms}. The scanner does not accept self-endorsements."
+        ],
+        hedges: [
+          "Hedging ({terms}) makes the claim wobble like a table with one short leg.",
+          "{terms}: vague, but oddly human. Small penalty applied.",
+          "Uncertainty detected ({terms}). Honest, or just a handy escape hatch?"
+        ],
+        excuses: [
+          "Classic excuse signature ({terms}). The scanner has seen this movie before.",
+          "{terms} ranks high on the Department of Fibs' greatest-hits list.",
+          "Something about {terms} smells strongly of a rehearsed alibi."
+        ],
+        extraordinary: [
+          "Extraordinary claim ({terms}). Extraordinary claims want extraordinary receipts.",
+          "{terms}? Bold. The detector requested evidence and received silence.",
+          "The statement involves {terms}, which statistically does not happen on a Tuesday."
+        ],
+        mundane: [
+          "Mundane detail ({terms}) detected. Liars usually skip the dull parts.",
+          "{terms} is wonderfully ordinary. Ordinary is hard to fake convincingly.",
+          "Believable small-scale details ({terms}) calmed the sensors."
+        ],
+        confession: [
+          "Self-incriminating honesty ({terms}). Admitting fault is oddly convincing.",
+          "{terms}: a statement that works against its speaker rarely looks like a cover story.",
+          "The subject volunteered an awkward admission ({terms}). Scanner impressed, slightly."
+        ],
+        exclaim: [
+          "{count} exclamation marks. Enthusiasm or panic? The detector refuses to choose.",
+          "That many exclamation marks ({count}) usually means someone is trying very hard.",
+          "Punctuation volume is high ({count} exclamation marks). Truth does not need a megaphone."
+        ],
+        shouting: [
+          "ALL CAPS detected. Volume is not evidence.",
+          "The statement is shouting. Truth does not require a megaphone.",
+          "Caps lock engaged. The scanner's ears are ringing."
+        ],
+        stretched: [
+          "Stretched letters ({terms}). Extra letters, extra suspicion.",
+          "An elongated word ({terms}) suggests emotional lobbying.",
+          "{terms} was stretched like taffy. The scanner noticed the effort."
+        ],
+        repeated: [
+          "Echo detected: {terms} said twice in a row. Emphasis, nerves, or a glitch.",
+          "Repeated words ({terms}). The scanner heard the echo and got suspicious.",
+          "Saying {terms} twice does not double the truth. Sadly."
+        ],
+        long: [
+          "{count} words is a lot of paperwork. Over-explaining is a classic tell.",
+          "A long statement ({count} words) gives the scanner more places to find holes.",
+          "Word count: {count}. The truth is usually shorter than this."
+        ],
+        short: [
+          "Almost no data to analyze. The scanner will rely heavily on vibes.",
+          "Very little to scan here, so the detector is mostly guessing.",
+          "Minimal input. The scanner did its best with what it was given."
+        ],
+        numbers: [
+          "Suspiciously specific number ({terms}). Real memories are blurrier.",
+          "{terms} is oddly precise. Memories are usually blurrier than this.",
+          "The scanner distrusts numbers that arrive with that much confidence."
+        ],
+        question: [
+          "That is a question, not a statement. The detector scanned the vibes instead.",
+          "Questions cannot lie, technically. The detector analyzed the mood anyway.",
+          "Interrogative sentence detected. Scoring the curiosity level."
+        ]
+      };
+
+      // Statements for the RANDOM STATEMENT button
+      const RANDOM_STATEMENTS = [
+        "I definitely did not eat the last slice of pizza.",
+        "I was late because of traffic, my alarm, and a minor power outage.",
+        "I have never once pretended to read a terms and conditions page.",
+        "Honestly, I swear I replied to your message yesterday.",
+        "I am a secret billionaire who just enjoys taking the bus.",
+        "I had cereal for breakfast and then walked to the bus stop.",
+        "My dog ate my homework, and I have a signed statement from the dog.",
+        "I always read the documentation before asking questions.",
+        "My phone battery died at exactly 4:37 pm, so I could not call.",
+        "I watered the plants this morning.",
+        "Trust me, I totally backed up the project. Everything is fine.",
+        "I forgot to send the email. That one is entirely my fault.",
+        "I met an alien yesterday and it asked for directions to the bus station.",
+        "I'm not lying, my code worked perfectly on my machine.",
+        "I think I might have maybe locked the door.",
+        "I NEVER STAY UP LATE ON MY PHONE!!!",
+        "I cooked dinner tonight and it was pretty average.",
+        "I invented the semicolon and never received credit.",
+        "Everybody loved my presentation. Absolutely everybody.",
+        "I was sooo close to finishing, I swear.",
+        "I'm a time traveler, but I only visit Tuesdays.",
+        "This statement is false."
+      ];
+
+      // Fictional lines shown while scanning
+      const SCAN_STEPS = [
+        "Calibrating sweat sensors",
+        "Counting suspicious adjectives",
+        "Measuring eyebrow-raise potential",
+        "Consulting the fictional Fib Database",
+        "Compiling verdict. Please do not blink"
+      ];
+
+      const BROW_LEVELS = ["RELAXED", "TWITCHING", "ARCHED", "ORBITAL"];
+      const EMPTY_TELEMETRY = { pulse: "--", sweat: "--", brow: "--", nerve: "--" };
+
+      /* ============================================================
+         3. DOM REFERENCES AND APP STATE
+         ============================================================ */
+      const $ = function (id) { return document.getElementById(id); };
+
+      const els = {
+        statement: $("statement"),
+        charCount: $("charCount"),
+        errorMsg: $("errorMsg"),
+        analyzeBtn: $("analyzeBtn"),
+        randomBtn: $("randomBtn"),
+        clearBtn: $("clearBtn"),
+        scanner: $("scanner"),
+        idleView: $("idleView"),
+        busyView: $("busyView"),
+        resultView: $("resultView"),
+        progress: $("progress"),
+        progressBar: $("progressBar"),
+        scanLog: $("scanLog"),
+        gaugeValue: $("gaugeValue"),
+        scoreValue: $("scoreValue"),
+        verdictTitle: $("verdictTitle"),
+        verdictLine: $("verdictLine"),
+        suspicionMeter: $("suspicionMeter"),
+        suspicionValue: $("suspicionValue"),
+        segments: $("segments"),
+        explanation: $("explanation"),
+        signalList: $("signalList"),
+        subjectEcho: $("subjectEcho"),
+        historyList: $("historyList"),
+        purgeBtn: $("purgeBtn"),
+        sensorDot: $("sensorDot"),
+        sensorStatus: $("sensorStatus"),
+        scanCount: $("scanCount"),
+        liveStatus: $("liveStatus"),
+        telePulse: $("telePulse"),
+        teleSweat: $("teleSweat"),
+        teleBrow: $("teleBrow"),
+        teleNerve: $("teleNerve")
+      };
+
+      const state = {
+        busy: false,
+        timers: [],
+        history: [],
+        scanTotal: 0,
+        lastRandomIndex: -1,
+        numberFrame: 0
+      };
+
+      /* ============================================================
+         4. SMALL UTILITIES
+         ============================================================ */
+      function clamp(value, min, max) {
+        return Math.min(max, Math.max(min, value));
+      }
+
+      function randomInt(min, max) {
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+      }
+
+      function pick(list, rng) {
+        return list[Math.floor(rng() * list.length)];
+      }
+
+      function escapeRegExp(text) {
+        return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      }
+
+      function formatSigned(number) {
+        return number > 0 ? "+" + number : String(number);
+      }
+
+      function fillTemplate(template, values) {
+        return template.replace(/\{(\w+)\}/g, function (match, key) {
+          return values && key in values ? String(values[key]) : "";
+        });
+      }
+
+      function prefersReducedMotion() {
+        return Boolean(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+      }
+
+      // Turns a string into a repeatable number (FNV-1a hash)
+      function hashString(text) {
+        let hash = 2166136261;
+        for (let i = 0; i < text.length; i++) {
+          hash ^= text.charCodeAt(i);
+          hash = Math.imul(hash, 16777619);
+        }
+        return hash >>> 0;
+      }
+
+      // Small seeded random generator (mulberry32): same seed, same numbers
+      function createRng(seed) {
+        let a = seed >>> 0;
+        return function () {
+          a = (a + 0x6d2b79f5) | 0;
+          let t = Math.imul(a ^ (a >>> 15), 1 | a);
+          t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+
+      function toneForScore(score) {
+        if (score <= 35) return "bad";
+        if (score <= 64) return "mid";
+        return "good";
+      }
+
+      function suspicionLevel(value) {
+        if (value < 35) return "low";
+        if (value < 65) return "mid";
+        return "high";
+      }
+
+      function truncate(text, max) {
+        return text.length > max ? text.slice(0, max - 3) + "..." : text;
+      }
+
+      /* ============================================================
+         5. TEXT HEURISTICS (the "science")
+         Each detector looks at the text and returns either null or a
+         signal: { id, label, detail, delta, tension, notes, values }
+           delta   = change to the truth score
+           tension = extra pressure on the suspicion meter
+         ============================================================ */
+      function buildContext(statement) {
+        const clean = statement.replace(/\s+/g, " ").trim();
+        const lower = clean.toLowerCase().replace(/[\u2018\u2019]/g, "'");
+        const plain = lower.replace(/[^\p{L}\p{N}\s']/gu, " ").replace(/\s+/g, " ").trim();
+        const words = plain.split(" ").filter(function (word) {
+          return /[\p{L}\p{N}]/u.test(word);
+        });
+        return { raw: clean, lower: lower, plain: plain, wordCount: words.length };
+      }
+
+      // Returns the list of terms that appear as whole words/phrases
+      function findTerms(lower, terms) {
+        return terms.filter(function (term) {
+          if (lower.indexOf(term) === -1) return false;
+          const pattern = new RegExp(
+            "(^|[^\\p{L}\\p{N}])" + escapeRegExp(term) + "(?=$|[^\\p{L}\\p{N}])",
+            "u"
+          );
+          return pattern.test(lower);
+        });
+      }
+
+      function formatTerms(terms) {
+        const shown = terms.slice(0, 3).map(function (term) { return "\"" + term + "\""; }).join(", ");
+        return terms.length > 3 ? shown + " +" + (terms.length - 3) + " more" : shown;
+      }
+
+      // Builds a detector from a simple word-list config
+      function makeTermDetector(config) {
+        return function detectTerms(ctx) {
+          const found = findTerms(ctx.lower, config.terms);
+          if (found.length === 0) return null;
+
+          const rawDelta = found.length * config.perTerm;
+          const delta = config.perTerm < 0
+            ? Math.max(rawDelta, -config.cap)
+            : Math.min(rawDelta, config.cap);
+          const tension = Math.min(
+            found.length * (config.tensionPerTerm || 0),
+            config.tensionCap || 0
+          );
+          const text = formatTerms(found);
+
+          return {
+            id: config.id,
+            label: config.label,
+            detail: text,
+            delta: delta,
+            tension: tension,
+            notes: config.notes,
+            values: { terms: text }
+          };
+        };
+      }
+
+      function detectExclamations(ctx) {
+        const count = (ctx.raw.match(/!/g) || []).length;
+        if (count < 2) return null;
+        return {
+          id: "exclaim",
+          label: "Exclamation overload",
+          detail: count + " marks",
+          delta: -Math.min(12, (count - 1) * 3),
+          tension: Math.min(9, count * 3),
+          notes: NOTES.exclaim,
+          values: { count: count }
+        };
+      }
+
+      function detectShouting(ctx) {
+        const letters = ctx.raw.match(/\p{L}/gu) || [];
+        const capitals = ctx.raw.match(/\p{Lu}/gu) || [];
+        if (letters.length < 8 || capitals.length / letters.length < 0.6) return null;
+        return {
+          id: "shouting",
+          label: "Shouting detected",
+          detail: "mostly capitals",
+          delta: -10,
+          tension: 10,
+          notes: NOTES.shouting,
+          values: {}
+        };
+      }
+
+      function detectStretchedLetters(ctx) {
+        const match = ctx.lower.match(/[\p{L}']*(\p{L})\1{2,}[\p{L}']*/u);
+        if (!match) return null;
+        const text = formatTerms([match[0]]);
+        return {
+          id: "stretched",
+          label: "Stretched letters",
+          detail: text,
+          delta: -5,
+          tension: 3,
+          notes: NOTES.stretched,
+          values: { terms: text }
+        };
+      }
+
+      function detectRepeatedWords(ctx) {
+        const match = ctx.plain.match(/(?:^|\s)([\p{L}\p{N}']+)\s+\1(?=\s|$)/u);
+        if (!match) return null;
+        const text = formatTerms([match[1]]);
+        return {
+          id: "repeated",
+          label: "Echo detected",
+          detail: text,
+          delta: -4,
+          tension: 3,
+          notes: NOTES.repeated,
+          values: { terms: text }
+        };
+      }
+
+      function detectLength(ctx) {
+        const count = ctx.wordCount;
+        if (count < 3) {
+          return {
+            id: "short",
+            label: "Minimal data",
+            detail: count + (count === 1 ? " word" : " words"),
+            delta: -6,
+            tension: 0,
+            notes: NOTES.short,
+            values: {}
+          };
+        }
+        if (count > 24) {
+          return {
+            id: "long",
+            label: "Over-explaining",
+            detail: count + " words",
+            delta: -Math.min(16, 6 + Math.floor((count - 24) / 4) * 2),
+            tension: Math.min(8, 3 + Math.floor((count - 24) / 6)),
+            notes: NOTES.long,
+            values: { count: count }
+          };
+        }
+        return null;
+      }
+
+      function detectSpecificNumbers(ctx) {
+        const match = ctx.raw.match(/\b\d{1,2}:\d{2}\b|\b\d{3,}\b(?!\s?%)/);
+        if (!match) return null;
+        const text = formatTerms([match[0]]);
+        return {
+          id: "numbers",
+          label: "Oddly specific number",
+          detail: text,
+          delta: -5,
+          tension: 3,
+          notes: NOTES.numbers,
+          values: { terms: text }
+        };
+      }
+
+      function detectQuestion(ctx) {
+        if (ctx.raw.indexOf("?") === -1) return null;
+        return {
+          id: "question",
+          label: "Question, not a statement",
+          detail: "",
+          delta: 0,
+          tension: 0,
+          notes: NOTES.question,
+          values: {}
+        };
+      }
+
+      // The full list of detectors, run in this order
+      const DETECTORS = [
+        makeTermDetector({ id: "absolutes", label: "Absolute language", terms: ABSOLUTE_TERMS,
+          perTerm: -4, cap: 16, tensionPerTerm: 4, tensionCap: 12, notes: NOTES.absolutes }),
+        makeTermDetector({ id: "oaths", label: "Sincerity theater", terms: OATH_TERMS,
+          perTerm: -9, cap: 22, tensionPerTerm: 6, tensionCap: 14, notes: NOTES.oaths }),
+        makeTermDetector({ id: "hedges", label: "Hedging", terms: HEDGE_TERMS,
+          perTerm: -3, cap: 9, tensionPerTerm: 2, tensionCap: 6, notes: NOTES.hedges }),
+        makeTermDetector({ id: "excuses", label: "Classic excuse signature", terms: EXCUSE_TERMS,
+          perTerm: -8, cap: 20, tensionPerTerm: 5, tensionCap: 12, notes: NOTES.excuses }),
+        makeTermDetector({ id: "extraordinary", label: "Extraordinary claim", terms: EXTRAORDINARY_TERMS,
+          perTerm: -12, cap: 28, tensionPerTerm: 3, tensionCap: 9, notes: NOTES.extraordinary }),
+        makeTermDetector({ id: "mundane", label: "Pleasantly boring detail", terms: MUNDANE_TERMS,
+          perTerm: 4, cap: 12, notes: NOTES.mundane }),
+        makeTermDetector({ id: "confession", label: "Self-incriminating honesty", terms: CONFESSION_TERMS,
+          perTerm: 7, cap: 14, notes: NOTES.confession }),
+        detectExclamations,
+        detectShouting,
+        detectStretchedLetters,
+        detectRepeatedWords,
+        detectLength,
+        detectSpecificNumbers,
+        detectQuestion
+      ];
+
+      /* ============================================================
+         6. SCORING AND RESULT BUILDING
+         ============================================================ */
+      function isParadox(ctx) {
+        return findTerms(ctx.lower, PARADOX_PHRASES).length > 0;
+      }
+
+      function buildTelemetry(truth, suspicion, rng) {
+        return {
+          pulse: Math.round(62 + suspicion * 0.55 + rng() * 10) + " BPM",
+          sweat: clamp(Math.round(suspicion * 0.8 + rng() * 15), 1, 99) + "%",
+          brow: BROW_LEVELS[Math.min(BROW_LEVELS.length - 1, Math.floor(suspicion / 25))],
+          nerve: clamp(Math.round(truth * 0.7 + rng() * 25), 1, 99) + "%"
+        };
+      }
+
+      function buildExplanation(tone, signals, rng) {
+        const parts = [pick(INTROS[tone], rng)];
+        const strongest = signals.slice().sort(function (a, b) {
+          return Math.abs(b.delta) - Math.abs(a.delta);
+        }).slice(0, 3);
+
+        if (strongest.length === 0) {
+          parts.push(pick(QUIET_NOTES, rng));
+        } else {
+          strongest.forEach(function (signal) {
+            parts.push(fillTemplate(pick(signal.notes, rng), signal.values));
+          });
+        }
+
+        parts.push(pick(OUTROS[tone], rng));
+        return parts.join(" ");
+      }
+
+      // Rows for the transparent "score breakdown" list
+      function buildBreakdownRows(signals, noise, rawTruth, truth) {
+        const rows = [
+          { label: "Baseline (everyone starts somewhere)", value: String(BASELINE_SCORE), kind: "neu" }
+        ];
+
+        if (signals.length === 0) {
+          rows.push({ label: "No notable signals found", value: "0", kind: "neu" });
+        }
+
+        signals.forEach(function (signal) {
+          rows.push({
+            label: signal.detail ? signal.label + " (" + signal.detail + ")" : signal.label,
+            value: formatSigned(signal.delta),
+            kind: signal.delta > 0 ? "pos" : signal.delta < 0 ? "neg" : "neu"
+          });
+        });
+
+        rows.push({ label: "Calibration noise (seeded from your text)", value: formatSigned(noise), kind: "neu" });
+        rows.push({
+          label: "Final truth probability" + (rawTruth !== truth ? " (clamped to 1-99)" : ""),
+          value: truth + "%",
+          kind: "total"
+        });
+        return rows;
+      }
+
+      function buildParadoxResult(ctx, rng) {
+        return {
+          statement: ctx.raw,
+          truth: 50,
+          suspicion: 50,
+          tone: "mid",
+          verdict: PARADOX_VERDICT,
+          explanation: pick(PARADOX_NOTES, rng),
+          rows: [
+            { label: "Self-referential paradox", value: "ERR", kind: "neg" },
+            { label: "Logic status", value: "404", kind: "neu" },
+            { label: "Final truth probability (forced coin flip)", value: "50%", kind: "total" }
+          ],
+          telemetry: buildTelemetry(50, 50, rng)
+        };
+      }
+
+      // Main entry point: statement in, full result object out
+      function analyzeStatement(statement) {
+        const ctx = buildContext(statement);
+        const rng = createRng(hashString(ctx.lower)); // same text, same result
+
+        if (isParadox(ctx)) {
+          return buildParadoxResult(ctx, rng);
+        }
+
+        const signals = DETECTORS.map(function (detector) { return detector(ctx); }).filter(Boolean);
+        const adjustment = signals.reduce(function (sum, s) { return sum + s.delta; }, 0);
+        const tension = signals.reduce(function (sum, s) { return sum + s.tension; }, 0);
+
+        const noise = Math.round((rng() - 0.5) * 20); // -10 to +10
+        const rawTruth = BASELINE_SCORE + adjustment + noise;
+        const truth = clamp(rawTruth, 1, 99);
+        const suspicion = clamp(Math.round((100 - truth) * 0.6 + tension + rng() * 8), 1, 99);
+
+        const tone = toneForScore(truth);
+        const verdict = VERDICTS.find(function (v) { return truth <= v.max; }) || VERDICTS[VERDICTS.length - 1];
+
+        return {
+          statement: ctx.raw,
+          truth: truth,
+          suspicion: suspicion,
+          tone: tone,
+          verdict: verdict,
+          explanation: buildExplanation(tone, signals, rng),
+          rows: buildBreakdownRows(signals, noise, rawTruth, truth),
+          telemetry: buildTelemetry(truth, suspicion, rng)
+        };
+      }
+
+      /* ============================================================
+         7. INPUT VALIDATION
+         ============================================================ */
+      function validateStatement(rawValue) {
+        const text = rawValue.replace(/\s+/g, " ").trim();
+
+        if (text.length === 0) {
+          return { ok: false, message: "Nothing to scan. Type a statement first, the detector cannot analyze silence." };
+        }
+        if (text.length < MIN_LENGTH) {
+          return { ok: false, message: "That is too short to scan. Give the machine at least " + MIN_LENGTH + " characters." };
+        }
+        if (!/[\p{L}\p{N}]/u.test(text)) {
+          return { ok: false, message: "Please include at least one letter or number. Symbols alone confuse the sensors." };
+        }
+        if (text.length > MAX_LENGTH) {
+          return { ok: false, message: "Statement is too long. The limit is " + MAX_LENGTH + " characters." };
+        }
+        return { ok: true, text: text };
+      }
+
+      /* ============================================================
+         8. UI HELPERS
+         ============================================================ */
+      function announce(message) {
+        els.liveStatus.textContent = message;
+      }
+
+      function showError(message) {
+        els.errorMsg.textContent = "ERR // " + message;
+        els.errorMsg.hidden = false;
+        els.statement.setAttribute("aria-invalid", "true");
+      }
+
+      function hideError() {
+        els.errorMsg.hidden = true;
+        els.errorMsg.textContent = "";
+        els.statement.removeAttribute("aria-invalid");
+      }
+
+      function updateCharCount() {
+        const length = els.statement.value.length;
+        els.charCount.textContent = length + " / " + MAX_LENGTH;
+        els.charCount.classList.toggle("limit", length >= MAX_LENGTH - 20);
+      }
+
+      function setSensor(mode) {
+        if (mode === "active") {
+          els.sensorDot.className = "dot on-green pulse";
+          els.sensorStatus.textContent = "SENSORS ACTIVE";
+        } else if (mode === "done") {
+          els.sensorDot.className = "dot on-green";
+          els.sensorStatus.textContent = "SCAN COMPLETE";
+        } else {
+          els.sensorDot.className = "dot";
+          els.sensorStatus.textContent = "SENSORS IDLE";
+        }
+      }
+
+      function setBusyUI(isBusy) {
+        els.analyzeBtn.disabled = isBusy;
+        els.randomBtn.disabled = isBusy;
+        els.analyzeBtn.textContent = isBusy ? "Scanning..." : "Analyze";
+        els.statement.readOnly = isBusy;
+      }
+
+      function showView(name) {
+        els.idleView.hidden = name !== "idle";
+        els.busyView.hidden = name !== "busy";
+        els.resultView.hidden = name !== "result";
+        els.scanner.dataset.state = name;
+        els.scanner.setAttribute("aria-busy", name === "busy" ? "true" : "false");
+      }
+
+      function setTelemetry(values) {
+        els.telePulse.textContent = values.pulse;
+        els.teleSweat.textContent = values.sweat;
+        els.teleBrow.textContent = values.brow;
+        els.teleNerve.textContent = values.nerve;
+      }
+
+      function randomTelemetry() {
+        return {
+          pulse: randomInt(60, 140) + " BPM",
+          sweat: randomInt(5, 95) + "%",
+          brow: pick(BROW_LEVELS, Math.random),
+          nerve: randomInt(5, 95) + "%"
+        };
+      }
+
+      function setProgress(percent) {
+        els.progressBar.style.width = percent + "%";
+        els.progress.setAttribute("aria-valuenow", String(Math.round(percent)));
+      }
+
+      function queue(callback, delay) {
+        state.timers.push(window.setTimeout(callback, delay));
+      }
+
+      function clearTimers() {
+        state.timers.forEach(function (id) { window.clearTimeout(id); });
+        state.timers = [];
+      }
+
+      /* ============================================================
+         9. RENDERING THE RESULT
+         ============================================================ */
+      function buildSegments() {
+        for (let i = 0; i < SEGMENT_COUNT; i++) {
+          const segment = document.createElement("span");
+          segment.className = "segment";
+          segment.style.setProperty("--i", String(i));
+          els.segments.appendChild(segment);
+        }
+      }
+
+      function animateGauge(score) {
+        const circle = els.gaugeValue;
+        circle.style.transition = "none";
+        circle.style.strokeDashoffset = String(GAUGE_CIRCUMFERENCE);
+        void circle.getBoundingClientRect(); // force a reflow so the reset sticks
+        circle.style.transition = "";
+        circle.style.strokeDashoffset = String(GAUGE_CIRCUMFERENCE * (1 - score / 100));
+      }
+
+      function animateNumber(element, target, duration) {
+        window.cancelAnimationFrame(state.numberFrame);
+        if (prefersReducedMotion()) {
+          element.textContent = target + "%";
+          return;
+        }
+        const start = performance.now();
+        function frame(now) {
+          const progress = Math.min(1, (now - start) / duration);
+          const eased = 1 - Math.pow(1 - progress, 3);
+          element.textContent = Math.round(target * eased) + "%";
+          if (progress < 1) {
+            state.numberFrame = window.requestAnimationFrame(frame);
+          }
+        }
+        state.numberFrame = window.requestAnimationFrame(frame);
+      }
+
+      function renderSuspicion(value) {
+        const lit = Math.max(1, Math.round(value / 5));
+        const segments = els.segments.children;
+        for (let i = 0; i < segments.length; i++) {
+          segments[i].classList.toggle("on", i < lit);
+        }
+        els.suspicionValue.textContent = value + "/100";
+        els.suspicionMeter.dataset.level = suspicionLevel(value);
+        els.segments.setAttribute("aria-label", "Suspicion index " + value + " out of 100");
+      }
+
+      function renderBreakdown(rows) {
+        els.signalList.replaceChildren();
+        rows.forEach(function (row) {
+          const item = document.createElement("li");
+          item.className = row.kind === "total" ? "sig-total" : "sig-" + row.kind;
+
+          const label = document.createElement("span");
+          label.className = "sig-label";
+          label.textContent = row.label;
+
+          const value = document.createElement("span");
+          value.className = "sig-value";
+          value.textContent = row.value;
+
+          item.append(label, value);
+          els.signalList.appendChild(item);
+        });
+      }
+
+      function renderResult(result) {
+        els.resultView.dataset.tone = result.tone;
+        els.verdictTitle.textContent = result.verdict.title;
+        els.verdictLine.textContent = result.verdict.line;
+        els.explanation.textContent = result.explanation;
+        els.subjectEcho.textContent = "Subject: \"" + truncate(result.statement, 140) + "\"";
+
+        renderBreakdown(result.rows);
+        setTelemetry(result.telemetry);
+        showView("result");
+
+        // Restart the small entrance animation
+        els.resultView.classList.remove("enter");
+        void els.resultView.offsetWidth;
+        els.resultView.classList.add("enter");
+
+        animateGauge(result.truth);
+        animateNumber(els.scoreValue, result.truth, 800);
+        renderSuspicion(result.suspicion);
+      }
+
+      function clearResultData() {
+        window.cancelAnimationFrame(state.numberFrame);
+        els.scoreValue.textContent = "--";
+        els.verdictTitle.textContent = "--";
+        els.verdictLine.textContent = "";
+        els.explanation.textContent = "";
+        els.subjectEcho.textContent = "";
+        els.signalList.replaceChildren();
+        els.scanLog.replaceChildren();
+        els.gaugeValue.style.strokeDashoffset = String(GAUGE_CIRCUMFERENCE);
+        const segments = els.segments.children;
+        for (let i = 0; i < segments.length; i++) {
+          segments[i].classList.remove("on");
+        }
+        els.suspicionValue.textContent = "--";
+        setProgress(0);
+        setTelemetry(EMPTY_TELEMETRY);
+      }
+
+      function resetResult() {
+        clearResultData();
+        showView("idle");
+      }
+
+      /* ============================================================
+         10. HISTORY
+         ============================================================ */
+      function addToHistory(result) {
+        state.history.unshift({
+          statement: result.statement,
+          truth: result.truth,
+          tone: result.tone,
+          verdictTitle: result.verdict.title,
+          time: Date.now()
+        });
+        if (state.history.length > MAX_HISTORY) {
+          state.history.length = MAX_HISTORY;
+        }
+        renderHistory();
+      }
+
+      function renderHistory() {
+        els.historyList.replaceChildren();
+        els.purgeBtn.disabled = state.history.length === 0;
+
+        if (state.history.length === 0) {
+          const empty = document.createElement("li");
+          empty.className = "history-empty";
+          empty.textContent = "No scans yet. The archive is lonely.";
+          els.historyList.appendChild(empty);
+          return;
+        }
+
+        state.history.forEach(function (entry, index) {
+          const item = document.createElement("li");
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "history-item";
+          button.dataset.index = String(index);
+          button.setAttribute(
+            "aria-label",
+            "Load into input: " + entry.statement + ". Score " + entry.truth + " percent, " + entry.verdictTitle + "."
+          );
+
+          const score = document.createElement("span");
+          score.className = "hist-score hist-" + entry.tone;
+          score.textContent = entry.truth + "%";
+
+          const body = document.createElement("span");
+          const text = document.createElement("span");
+          text.className = "hist-text";
+          text.textContent = entry.statement;
+          const meta = document.createElement("span");
+          meta.className = "hist-meta";
+          const time = new Date(entry.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+          meta.textContent = entry.verdictTitle + " // " + time;
+          body.append(text, meta);
+
+          button.append(score, body);
+          item.appendChild(button);
+          els.historyList.appendChild(item);
+        });
+      }
+
+      /* ============================================================
+         11. SCAN FLOW
+         ============================================================ */
+      function addScanStep(text, index) {
+        const item = document.createElement("li");
+        const label = document.createElement("span");
+        label.textContent = "> " + text;
+        const ok = document.createElement("span");
+        ok.className = "ok";
+        ok.textContent = "OK";
+        item.append(label, ok);
+        els.scanLog.appendChild(item);
+
+        setProgress(((index + 1) / SCAN_STEPS.length) * 100);
+        setTelemetry(randomTelemetry());
+      }
+
+      function startScan(statement) {
+        const reduced = prefersReducedMotion();
+        const stepDelay = reduced ? 50 : 380;
+
+        state.busy = true;
+        clearResultData();
+        setBusyUI(true);
+        setSensor("active");
+        showView("busy");
+        announce("Scanning started.");
+
+        SCAN_STEPS.forEach(function (text, index) {
+          queue(function () { addScanStep(text, index); }, index * stepDelay);
+        });
+        queue(function () { finishScan(statement); }, SCAN_STEPS.length * stepDelay + (reduced ? 50 : 300));
+      }
+
+      function finishScan(statement) {
+        clearTimers();
+        try {
+          const result = analyzeStatement(statement);
+          renderResult(result);
+          addToHistory(result);
+
+          state.scanTotal += 1;
+          els.scanCount.textContent = String(state.scanTotal).padStart(3, "0");
+          setSensor("done");
+          announce(
+            "Analysis complete. Truth probability " + result.truth + " percent. " +
+            "Suspicion index " + result.suspicion + " out of 100. " +
+            "Verdict: " + result.verdict.title + ". This is a fictional entertainment score."
+          );
+        } catch (error) {
+          console.error("LIE DETECTOR 404: analysis failed", error);
+          resetResult();
+          setSensor("idle");
+          showError("The detector malfunctioned. That is not your fault. Please try again.");
+        } finally {
+          state.busy = false;
+          setBusyUI(false);
+        }
+      }
+
+      /* ============================================================
+         12. EVENT HANDLERS
+         ============================================================ */
+      function handleAnalyze() {
+        if (state.busy) return;
+
+        const validation = validateStatement(els.statement.value);
+        if (!validation.ok) {
+          showError(validation.message);
+          els.statement.focus();
+          return;
+        }
+
+        hideError();
+        startScan(validation.text);
+      }
+
+      function handleRandom() {
+        if (state.busy) return;
+
+        let index;
+        do {
+          index = Math.floor(Math.random() * RANDOM_STATEMENTS.length);
+        } while (index === state.lastRandomIndex && RANDOM_STATEMENTS.length > 1);
+
+        state.lastRandomIndex = index;
+        els.statement.value = RANDOM_STATEMENTS[index];
+        updateCharCount();
+        hideError();
+        handleAnalyze();
+      }
+
+      function handleClear() {
+        clearTimers();
+        state.busy = false;
+        setBusyUI(false);
+
+        els.statement.value = "";
+        updateCharCount();
+        hideError();
+        resetResult();
+        setSensor("idle");
+        els.statement.focus();
+        announce("Interface cleared.");
+      }
+
+      function handlePurge() {
+        state.history = [];
+        renderHistory();
+        announce("History purged.");
+      }
+
+      function handleHistoryClick(event) {
+        const button = event.target.closest("button[data-index]");
+        if (!button || state.busy) return;
+
+        const entry = state.history[Number(button.dataset.index)];
+        if (!entry) return;
+
+        els.statement.value = entry.statement;
+        updateCharCount();
+        hideError();
+        els.statement.focus();
+        announce("Statement loaded from history. Press analyze to scan it again.");
+      }
+
+      function handleKeydown(event) {
+        if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+          event.preventDefault();
+          handleAnalyze();
+        }
+      }
+
+      /* ============================================================
+         13. INIT
+         ============================================================ */
+      function init() {
+        els.gaugeValue.style.strokeDasharray = String(GAUGE_CIRCUMFERENCE);
+        els.gaugeValue.style.strokeDashoffset = String(GAUGE_CIRCUMFERENCE);
+
+        buildSegments();
+        renderHistory();
+        updateCharCount();
+        showView("idle");
+
+        els.analyzeBtn.addEventListener("click", handleAnalyze);
+        els.randomBtn.addEventListener("click", handleRandom);
+        els.clearBtn.addEventListener("click", handleClear);
+        els.purgeBtn.addEventListener("click", handlePurge);
+        els.historyList.addEventListener("click", handleHistoryClick);
+        els.statement.addEventListener("input", function () {
+          updateCharCount();
+          hideError();
+        });
+        document.addEventListener("keydown", handleKeydown);
+      }
+
+      init();
+    })();
+  </script>
+</body>
+</html>
